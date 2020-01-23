@@ -16,7 +16,8 @@ ANDROID_CPU_ABI_MAP = {
     'x86'   : 'x86',
     'x64'   : 'x86_64'
 }
-ANDROID_BUILD_CPUS = ['arm', 'arm64', 'x86', 'x64']
+#ANDROID_BUILD_CPUS = ['arm', 'arm64', 'x86', 'x64']
+ANDROID_BUILD_CPUS = ['arm','arm64']
 IOS_BUILD_ARCHS = ['arm64', 'arm','x64','x86']
 
 def build_gn_args(platform_args):
@@ -193,12 +194,56 @@ def build(target_dir, platform, debug, bitcode):
         sh('jar cvfM libjingle_peerconnection.so.jar lib')
         rmr('lib')
 
+def quick(target_dir, platform, debug, bitcode):
+    build_dir = os.path.join(target_dir, 'build', platform)
+    build_type = 'Debug' if debug else 'Release'
+    depot_tools_dir = os.path.join(target_dir, 'depot_tools')
+    webrtc_dir = os.path.join(target_dir, 'webrtc', platform, 'src')
+    libPath = os.path.join(os.path.abspath(os.path.dirname(__file__)), '../android/libs')
+
+    if not os.path.isdir(webrtc_dir):
+        print('WebRTC source not found, did you forget to run --setup?')
+        sys.exit(1)
+
+    # Prepare environment
+    env = os.environ.copy()
+    path_parts = [env['PATH'], depot_tools_dir]
+    if platform == 'android':
+        # Same as . build/android/envsetup.sh
+        android_sdk_root = os.path.join(webrtc_dir, 'third_party/android_tools/sdk')
+        path_parts.append(os.path.join(android_sdk_root, 'platform-tools'))
+        path_parts.append(os.path.join(android_sdk_root, 'tools'))
+        path_parts.append(os.path.join(webrtc_dir, 'build/android'))
+    env['PATH'] = ':'.join(path_parts)
+
+    os.chdir(webrtc_dir)
+
+    for cpu in ANDROID_BUILD_CPUS:
+        gn_out_dir = 'out/%s-%s' % (build_type, cpu)
+        ninja_cmd = 'ninja -C %s libwebrtc libjingle_peerconnection_so' % gn_out_dir
+        sh(ninja_cmd, env)
+
+    gn_out_dir = 'out/%s-%s' % (build_type, ANDROID_BUILD_CPUS[0])
+    shutil.copy(os.path.join(gn_out_dir, 'lib.java/sdk/android/libwebrtc.jar'), build_dir)
+
+    for cpu in ANDROID_BUILD_CPUS:
+        lib_dir = os.path.join(build_dir, 'lib', ANDROID_CPU_ABI_MAP[cpu])
+        mkdirp(lib_dir)
+        gn_out_dir = 'out/%s-%s' % (build_type, cpu)
+        shutil.copy(os.path.join(gn_out_dir, 'libjingle_peerconnection_so.so'), lib_dir)
+
+    os.chdir(build_dir)
+    sh('jar cvfM libjingle_peerconnection.so.jar lib')
+    rmr('lib')
+    sh('cp * ' + libPath)
+    sh('cp * ~/mac/uno/hemei/clients/rn/node_modules/react-native-webrtc/android/libs')
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('dir', help='Target directory')
     parser.add_argument('--setup', help='Prepare the target directory for building', action='store_true')
     parser.add_argument('--build', help='Build WebRTC in the target directory', action='store_true')
+    parser.add_argument('--quick', help='Build WebRTC in the target directory', action='store_true')
     parser.add_argument('--ios', help='Use iOS as the target platform', action='store_true')
     parser.add_argument('--android', help='Use Android as the target platform', action='store_true')
     parser.add_argument('--debug', help='Make a Debug build (defaults to false)', action='store_true')
@@ -206,7 +251,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    if not (args.setup or args.build):
+    if not (args.setup or args.build or args.quick):
         print('--setup or --build must be specified!')
         sys.exit(1)
 
@@ -237,5 +282,10 @@ if __name__ == "__main__":
     if args.build:
         build(target_dir, platform, args.debug, args.bitcode)
         print('WebRTC build for %s completed in %s' % (platform, target_dir))
+        sys.exit(0)
+
+    if args.quick:
+        quick(target_dir, platform, args.debug, args.bitcode)
+        print('WebRTC quick build for %s completed in %s' % (platform, target_dir))
         sys.exit(0)
 
