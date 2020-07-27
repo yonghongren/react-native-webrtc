@@ -17,7 +17,7 @@ ANDROID_CPU_ABI_MAP = {
     'x64'   : 'x86_64'
 }
 #ANDROID_BUILD_CPUS = ['arm', 'arm64', 'x86', 'x64']
-ANDROID_BUILD_CPUS = ['arm','arm64']
+ANDROID_BUILD_CPUS = ['arm', 'arm64']
 IOS_BUILD_ARCHS = ['arm64', 'arm','x64','x86']
 
 def build_gn_args(platform_args):
@@ -234,9 +234,9 @@ def quick(target_dir, platform, debug, bitcode):
 
     os.chdir(build_dir)
     sh('jar cvfM libjingle_peerconnection.so.jar lib')
-    rmr('lib')
-    sh('cp * ' + libPath)
-    sh('cp * ~/mac/uno/hemei/clients/rn/node_modules/react-native-webrtc/android/libs')
+    #rmr('lib')
+    sh('cp *.jar ' + libPath)
+    sh('cp *.jar ~/mac/uno/hemei/clients/rn/node_modules/react-native-webrtc/android/libs')
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
