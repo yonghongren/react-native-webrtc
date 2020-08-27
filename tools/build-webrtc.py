@@ -97,6 +97,10 @@ def setup(target_dir, platform):
         sh('fetch --nohooks webrtc_%s' % platform, env)
 
     # Run glient
+    # if 'setup' fails, subsequent runs may give: Error: client not configured; see 'gclient config'
+    # below works around this.
+    #sh('gclient config https://chromium.googlesource.com/chromium/src.git');
+    
     sh('gclient sync', env)
 
     # Install dependencies
@@ -236,7 +240,7 @@ def quick(target_dir, platform, debug, bitcode):
     sh('jar cvfM libjingle_peerconnection.so.jar lib')
     #rmr('lib')
     sh('cp *.jar ' + libPath)
-    sh('cp *.jar ~/mac/uno/hemei/clients/rn/node_modules/react-native-webrtc/android/libs')
+    #sh('cp *.jar ~/mac/uno/hemei/clients/rn/node_modules/react-native-webrtc/android/libs')
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
