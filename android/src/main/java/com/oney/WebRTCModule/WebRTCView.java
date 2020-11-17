@@ -8,6 +8,8 @@ import androidx.core.view.ViewCompat;
 import android.view.View;
 import android.view.ViewGroup;
 import android.util.Log;
+import android.graphics.Bitmap;
+import android.graphics.Rect;
 
 import com.facebook.react.bridge.ReactContext;
 
@@ -23,6 +25,7 @@ import org.webrtc.RendererCommon.RendererEvents;
 import org.webrtc.RendererCommon.ScalingType;
 import org.webrtc.SurfaceViewRenderer;
 import org.webrtc.VideoTrack;
+import org.webrtc.EglRenderer;
 
 public class WebRTCView extends ViewGroup {
     /**
@@ -101,6 +104,12 @@ public class WebRTCView extends ViewGroup {
      */
     private boolean mirror;
 
+
+    /**
+     * Whether to detect objects.
+     */
+    private boolean detectObjects = false;
+
     /**
      * Indicates if the {@link SurfaceViewRenderer} is attached to the video
      * track.
@@ -166,6 +175,23 @@ public class WebRTCView extends ViewGroup {
      */
     private VideoTrack videoTrack;
 
+    /**
+     * frame listener
+     */
+    private FrameListener frameListener = null;
+
+    private class FrameListener implements EglRenderer.FrameListener {
+        @Override
+        public synchronized void onFrame(Bitmap srcBitmap) {
+            Log.d(TAG, "onFrame in WebRTCView w=" + srcBitmap.getWidth() + "h=" + srcBitmap.getHeight());
+
+            ReactContext reactContext = (ReactContext) getContext();
+            WebRTCModule module = reactContext.getNativeModule(WebRTCModule.class);
+
+            Rect area = module.objectDetector.processBitmap(srcBitmap);
+        }
+    }
+
     public WebRTCView(Context context) {
         super(context);
 
@@ -181,6 +207,9 @@ public class WebRTCView extends ViewGroup {
      * opaque black and the surface part to transparent.
      */
     private void cleanSurfaceViewRenderer() {
+        if (frameListener != null) {
+            surfaceViewRenderer.removeFrameListener(frameListener);
+        }
         surfaceViewRenderer.setBackgroundColor(Color.BLACK);
         surfaceViewRenderer.clearImage();
     }
@@ -604,6 +633,12 @@ public class WebRTCView extends ViewGroup {
 
             surfaceViewRenderer.init(sharedContext, rendererEvents);
 
+            if (detectObjects) {
+                Log.d(TAG, "add frame listener");
+                frameListener = new FrameListener();
+                surfaceViewRenderer.addFrameListener(frameListener, 1f);
+            }
+    
             try {
                 videoTrack.addSink(surfaceViewRenderer);
             } catch (Throwable tr) {
@@ -618,4 +653,10 @@ public class WebRTCView extends ViewGroup {
             rendererAttached = true;
         }
     }
+
+    public void setObjectDetection(boolean detect) {
+        Log.d(TAG, "setObjectDetection " + detect);
+        detectObjects = detect;
+    }
+
 }

@@ -14,6 +14,7 @@ import com.facebook.react.bridge.ReadableMap;
 import com.facebook.react.bridge.ReadableMapKeySetIterator;
 import com.facebook.react.bridge.ReadableType;
 import com.facebook.react.bridge.WritableMap;
+import com.facebook.react.bridge.LifecycleEventListener;
 import com.facebook.react.module.annotations.ReactModule;
 import com.facebook.react.modules.core.DeviceEventManagerModule;
 
@@ -27,8 +28,9 @@ import org.webrtc.audio.AudioDeviceModule;
 import org.webrtc.audio.JavaAudioDeviceModule;
 
 @ReactModule(name = "WebRTCModule")
-public class WebRTCModule extends ReactContextBaseJavaModule {
+public class WebRTCModule extends ReactContextBaseJavaModule implements LifecycleEventListener {
     static final String TAG = WebRTCModule.class.getCanonicalName();
+    ObjectDetector objectDetector = new ObjectDetector();
 
     PeerConnectionFactory mFactory;
     private final SparseArray<PeerConnectionObserver> mPeerConnectionObservers;
@@ -66,6 +68,8 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
 
     public WebRTCModule(ReactApplicationContext reactContext, Options options) {
         super(reactContext);
+
+        reactContext.addLifecycleEventListener(this);
 
         mPeerConnectionObservers = new SparseArray<>();
         localStreams = new HashMap<>();
@@ -122,6 +126,8 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
                 .createPeerConnectionFactory();
 
         getUserMediaImpl = new GetUserMediaImpl(this, reactContext);
+
+        objectDetector.initialize(reactContext.getAssets());
     }
 
     @Override
@@ -979,4 +985,25 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
             pco.dataChannelSend(dataChannelId, data, type);
         }
     }
+
+    @ReactMethod
+    public void setObjectDetection(boolean value) {
+        getUserMediaImpl.setObjectDetection(value);
+    }
+
+    @Override
+    public void onHostResume() {
+        Log.d(TAG, "onHostResume");
+    }
+
+    @Override
+    public void onHostPause() {
+        Log.d(TAG, "onHostPause");
+    }
+
+    @Override
+    public void onHostDestroy() {
+        Log.d(TAG, "onHostDestroy");
+    }
+
 }

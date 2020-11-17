@@ -71,4 +71,15 @@ public class RTCVideoViewManager extends SimpleViewManager<WebRTCView> {
   public void setZOrder(WebRTCView view, int zOrder) {
     view.setZOrder(zOrder);
   }
+
+  /**
+   * 
+   * @param view
+   * @param objectDetection - whether to perform object detection.
+   */
+  @ReactProp(name = "objectDetection")
+  public void setObjectDetection(WebRTCView view, boolean detect) {    
+    view.setObjectDetection(detect);
+  }
+
 }

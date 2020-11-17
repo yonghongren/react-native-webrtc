@@ -34,6 +34,10 @@ class MediaDevices extends EventTarget(MEDIA_DEVICES_EVENTS) {
     getUserMedia(constraints) {
         return getUserMedia(constraints);
     }
+
+    setObjectDetection(value) {
+        return WebRTCModule.setObjectDetection(value);
+    }
 }
 
 export default new MediaDevices();

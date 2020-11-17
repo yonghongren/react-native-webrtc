@@ -1,6 +1,8 @@
 package com.oney.WebRTCModule;
 
 import android.util.Log;
+import android.graphics.Rect;
+// import android.content.pm.PackageManager;
 
 import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.Callback;
@@ -9,6 +11,8 @@ import com.facebook.react.bridge.ReadableArray;
 import com.facebook.react.bridge.ReadableMap;
 import com.facebook.react.bridge.WritableArray;
 import com.facebook.react.bridge.WritableMap;
+import com.facebook.react.bridge.ReactContext;
+import com.facebook.react.bridge.NoSuchKeyException;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -44,6 +48,13 @@ class GetUserMediaImpl {
 
         boolean camera2supported = false;
 
+        // FEATURE_CAMERA_EXTERNAL is correctly false on phones, but on TX6 with a USB camera
+        // it is still false even though the camera works.
+        // Log.d(TAG, "external camera feature " + reactContext.getPackageManager().hasSystemFeature(PackageManager.FEATURE_CAMERA_EXTERNAL));
+
+        // TX6 runs Pie (SDK 28), but the attached USB camera doesn't support camera2 API.
+        // CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL is CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_LEGACY
+
         try {
             camera2supported = Camera2Enumerator.isSupported(reactContext);
         } catch (Throwable tr) {
@@ -77,6 +88,41 @@ class GetUserMediaImpl {
         return track;
     }
 
+    class VideoSourceFrameListener implements VideoSource.FrameListener {
+        private boolean detectObjects = false;
+        public Rect onFrame(VideoFrame frame) {
+            if (detectObjects == false) {
+                return null;
+           }
+
+           WebRTCModule module = reactContext.getNativeModule(WebRTCModule.class);
+
+            Rect rect = module.objectDetector.processVideoFrame(frame);
+            if (rect == null || rect.isEmpty()) {
+                Log.d(TAG, "Nothing detected");
+            } else {
+                Log.d(TAG, String.format("area of interest: %d %d %d %d", rect.left, rect.top, rect.right, rect.bottom));
+            }
+            return rect;
+        }
+        public void setObjectDetection(boolean value) {
+            detectObjects = value;
+        }
+    }
+
+    // This assumes there is only one source. Need to handle case of multiple cameras, or 
+    // multiple getUserMedia calls.
+    private VideoSource videoSource;
+    private final VideoSourceFrameListener frameListener = new VideoSourceFrameListener();
+    public void setObjectDetection(boolean value) {
+        frameListener.setObjectDetection(value);
+        if (value == true) {
+            videoSource.addFrameListener(frameListener);
+        } else {
+            videoSource.removeFrameListener(frameListener);
+        }
+    }
+
     private VideoTrack createVideoTrack(ReadableMap constraints) {
         ReadableMap videoConstraintsMap = constraints.getMap("video");
 
@@ -93,9 +139,22 @@ class GetUserMediaImpl {
         EglBase.Context eglContext = EglUtils.getRootEglBaseContext();
         SurfaceTextureHelper surfaceTextureHelper =
             SurfaceTextureHelper.create("CaptureThread", eglContext);
-        VideoSource videoSource = pcFactory.createVideoSource(videoCapturer.isScreencast());
+        videoSource = pcFactory.createVideoSource(videoCapturer.isScreencast());
         videoCapturer.initialize(surfaceTextureHelper, reactContext, videoSource.getCapturerObserver());
 
+        // It seems natural to pass object detection flag down through constraints. But
+        // JS code won't pass down non-standard constraint parameters. See RTCUtil.js 'normalize'.
+        // So frame listener is always added, and use a flag to control whether to perform detection.
+        // try {
+        //     Boolean detectObjects = videoConstraintsMap.getBoolean("objectDetection");
+        //     Log.d(TAG, "add frame listener in getUserMedia " + detectObjects);
+        //     if (detectObjects) {
+        //         videoSource.addFrameListener(frameListener);
+        //     }
+        // } catch(NoSuchKeyException e) {
+        //     Log.d(TAG, "object detection", e);
+        // }
+    
         String id = UUID.randomUUID().toString();
         VideoTrack track = pcFactory.createVideoTrack(id, videoSource);
 

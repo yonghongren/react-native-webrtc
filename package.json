@@ -1,16 +1,42 @@
 {
-  "name": "react-native-webrtc",
-  "version": "1.75.3",
-  "repository": {
+  "_from": "git+https://github.com/yonghongren/react-native-webrtc.git",
+  "_id": "react-native-webrtc@1.75.3",
+  "_inBundle": false,
+  "_integrity": "",
+  "_location": "/react-native-webrtc",
+  "_phantomChildren": {},
+  "_requested": {
     "type": "git",
-    "url": "git+https://github.com/react-native-webrtc/react-native-webrtc.git"
+    "raw": "react-native-webrtc@git+https://github.com/yonghongren/react-native-webrtc.git",
+    "name": "react-native-webrtc",
+    "escapedName": "react-native-webrtc",
+    "rawSpec": "git+https://github.com/yonghongren/react-native-webrtc.git",
+    "saveSpec": "git+https://github.com/yonghongren/react-native-webrtc.git",
+    "fetchSpec": "https://github.com/yonghongren/react-native-webrtc.git",
+    "gitCommittish": null
   },
-  "nativePackage": true,
-  "description": "WebRTC for React Native",
+  "_requiredBy": [
+    "/"
+  ],
+  "_resolved": "git+https://github.com/yonghongren/react-native-webrtc.git#b1d9bc5e1c87b58c2f1fe6895589be41344aeb42",
+  "_spec": "react-native-webrtc@git+https://github.com/yonghongren/react-native-webrtc.git",
+  "_where": "/home/ren/uno/hemei/clients/rn",
   "author": {
     "name": "Oney",
     "email": "appdevoney@gmail.com"
   },
+  "bugs": {
+    "url": "https://github.com/react-native-webrtc/react-native-webrtc/issues"
+  },
+  "bundleDependencies": false,
+  "dependencies": {
+    "base64-js": "^1.1.2",
+    "event-target-shim": "^1.0.5",
+    "prop-types": "^15.5.10",
+    "uuid": "^3.3.2"
+  },
+  "deprecated": false,
+  "description": "WebRTC for React Native",
   "homepage": "https://github.com/react-native-webrtc/react-native-webrtc",
   "keywords": [
     "react-component",
@@ -19,16 +45,14 @@
     "android",
     "webrtc"
   ],
-  "dependencies": {
-    "base64-js": "^1.1.2",
-    "event-target-shim": "^1.0.5",
-    "prop-types": "^15.5.10",
-    "uuid": "^3.3.2"
-  },
+  "name": "react-native-webrtc",
+  "nativePackage": true,
   "peerDependencies": {
     "react-native": ">=0.40.0"
   },
-  "bugs": {
-    "url": "https://github.com/react-native-webrtc/react-native-webrtc/issues"
-  }
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/react-native-webrtc/react-native-webrtc.git"
+  },
+  "version": "1.75.3"
 }
