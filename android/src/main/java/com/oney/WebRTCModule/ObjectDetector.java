@@ -35,7 +35,7 @@ public final class ObjectDetector {
         TF_OD_API;
     }
 
-    static final String TAG = ObjectDetector.class.getCanonicalName();
+    static final String TAG = "ObjectDetector"; // ObjectDetector.class.getCanonicalName();
     static final String TF_OD_API_MODEL_FILE = "detect.tflite";
     static final String TF_OD_API_LABELS_FILE = "file:///android_asset/labelmap.txt";
     static final int TF_INPUT_SIZE = 300;

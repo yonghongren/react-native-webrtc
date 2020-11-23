@@ -1,5 +1,6 @@
 package com.oney.WebRTCModule;
 
+import android.os.Build;
 import android.util.Log;
 import android.graphics.Rect;
 // import android.content.pm.PackageManager;
@@ -29,6 +30,11 @@ class GetUserMediaImpl {
      * The {@link Log} tag with which {@code GetUserMediaImpl} is to log.
      */
     private static final String TAG = WebRTCModule.TAG;
+
+    public static boolean isTV() {
+        // return false;
+        return (Build.DEVICE.equals("p281") || Build.DEVICE.equals("petrel-p1"));
+    }
 
     private final CameraEnumerator cameraEnumerator;
     private final ReactApplicationContext reactContext;
@@ -115,12 +121,14 @@ class GetUserMediaImpl {
     private VideoSource videoSource;
     private final VideoSourceFrameListener frameListener = new VideoSourceFrameListener();
     public void setObjectDetection(boolean value) {
-        frameListener.setObjectDetection(value);
-        if (value == true) {
-            videoSource.addFrameListener(frameListener);
-        } else {
-            videoSource.removeFrameListener(frameListener);
-        }
+        Log.d(TAG, "ignore setObjectDetection" + value);
+
+        // frameListener.setObjectDetection(value);
+        // if (value == true) {
+        //     videoSource.addFrameListener(frameListener);
+        // } else {
+        //     videoSource.removeFrameListener(frameListener);
+        // }
     }
 
     private VideoTrack createVideoTrack(ReadableMap constraints) {
@@ -154,6 +162,14 @@ class GetUserMediaImpl {
         // } catch(NoSuchKeyException e) {
         //     Log.d(TAG, "object detection", e);
         // }
+
+        if (isTV()) {
+            Log.d(TAG, "Enable object detection");
+            VideoSourceFrameListener frameListener = new VideoSourceFrameListener();
+            frameListener.setObjectDetection(true);
+            videoSource.addFrameListener(frameListener);
+        }
+
     
         String id = UUID.randomUUID().toString();
         VideoTrack track = pcFactory.createVideoTrack(id, videoSource);
