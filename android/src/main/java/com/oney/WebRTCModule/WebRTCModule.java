@@ -994,11 +994,15 @@ public class WebRTCModule extends ReactContextBaseJavaModule implements Lifecycl
     @Override
     public void onHostResume() {
         Log.d(TAG, "onHostResume");
+        
+        objectDetector.resume();
     }
 
     @Override
     public void onHostPause() {
         Log.d(TAG, "onHostPause");
+
+        objectDetector.suspend();    
     }
 
     @Override

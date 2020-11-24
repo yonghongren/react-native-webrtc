@@ -96,21 +96,19 @@ class GetUserMediaImpl {
 
     class VideoSourceFrameListener implements VideoSource.FrameListener {
         private boolean detectObjects = false;
-        public Rect onFrame(VideoFrame frame) {
+
+
+        public Rect onFrame(VideoFrame frame, VideoSource source) {
             if (detectObjects == false) {
                 return null;
-           }
-
-           WebRTCModule module = reactContext.getNativeModule(WebRTCModule.class);
-
-            Rect rect = module.objectDetector.processVideoFrame(frame);
-            if (rect == null || rect.isEmpty()) {
-                Log.d(TAG, "Nothing detected");
-            } else {
-                Log.d(TAG, String.format("area of interest: %d %d %d %d", rect.left, rect.top, rect.right, rect.bottom));
             }
-            return rect;
+
+            WebRTCModule module = reactContext.getNativeModule(WebRTCModule.class);
+
+            module.objectDetector.processVideoFrameInBackground(frame, source);
+            return null;
         }
+
         public void setObjectDetection(boolean value) {
             detectObjects = value;
         }
@@ -121,14 +119,14 @@ class GetUserMediaImpl {
     private VideoSource videoSource;
     private final VideoSourceFrameListener frameListener = new VideoSourceFrameListener();
     public void setObjectDetection(boolean value) {
-        Log.d(TAG, "ignore setObjectDetection" + value);
+        Log.d(TAG, "setObjectDetection" + value);
 
-        // frameListener.setObjectDetection(value);
-        // if (value == true) {
-        //     videoSource.addFrameListener(frameListener);
-        // } else {
-        //     videoSource.removeFrameListener(frameListener);
-        // }
+        frameListener.setObjectDetection(value);
+        if (value == true) {
+            videoSource.addFrameListener(frameListener);
+        } else {
+            videoSource.removeFrameListener(frameListener);
+        }
     }
 
     private VideoTrack createVideoTrack(ReadableMap constraints) {
@@ -164,10 +162,7 @@ class GetUserMediaImpl {
         // }
 
         if (isTV()) {
-            Log.d(TAG, "Enable object detection");
-            VideoSourceFrameListener frameListener = new VideoSourceFrameListener();
-            frameListener.setObjectDetection(true);
-            videoSource.addFrameListener(frameListener);
+            setObjectDetection(false);
         }
 
     

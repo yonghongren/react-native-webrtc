@@ -1,3 +1,11 @@
+/*
+Test result with C920 at 1280x720 on TX6:
+   Processing in calling thread speed: 3 fps
+   Processing in a background thread: 6-7 fps
+   Limited to one frame at a time: ~11 fps
+   No detection: 15 fps
+*/
+
 package com.oney.WebRTCModule;
 
 import java.io.IOException;
@@ -16,6 +24,8 @@ import android.graphics.Canvas;
 import android.graphics.Matrix;
 import android.content.Context;
 import android.os.Environment;
+import android.os.Handler;
+import android.os.HandlerThread;
 import android.opengl.GLES20;
 
 import org.webrtc.VideoFrame;
@@ -25,6 +35,7 @@ import org.webrtc.GlTextureFrameBuffer;
 import org.webrtc.NV21Buffer;
 import org.webrtc.GlRectDrawer;
 import org.webrtc.RendererCommon.GlDrawer;
+import org.webrtc.VideoSource;
 
 import org.tensorflow.lite.detection.tflite.Classifier;
 import org.tensorflow.lite.detection.tflite.TFLiteObjectDetectionAPIModel;
@@ -48,7 +59,11 @@ public final class ObjectDetector {
 
     BitmapFrameProcessor bitmapFrameProcessor;
     TextureVideoFrameProcessor textureVideoFrameProcessor;
-    NV21VideoFrameProcessor nv21ideoFrameProcessor;
+    NV21VideoFrameProcessor nv21VideoFrameProcessor;
+
+    boolean processingImage = false; // true if a frame is being processed
+    private Handler handler;
+    private HandlerThread handlerThread;
 
     public boolean initialize(AssetManager assetManager) {
         try {
@@ -69,8 +84,8 @@ public final class ObjectDetector {
         if (bitmapFrameProcessor != null) {
             bitmapFrameProcessor.release();
         }
-        if (nv21ideoFrameProcessor != null) {
-            nv21ideoFrameProcessor.release();
+        if (nv21VideoFrameProcessor != null) {
+            nv21VideoFrameProcessor.release();
         }
         if (textureVideoFrameProcessor != null) {
             textureVideoFrameProcessor.release();
@@ -440,10 +455,7 @@ public final class ObjectDetector {
             }
         }
 
-        // Process a NV21 VideoFrame and return area of detected objects.
-        public Rect process(VideoFrame frame) {
-            NV21Buffer buffer = (NV21Buffer) frame.getBuffer();
-
+        public boolean extractImage(NV21Buffer buffer) {
             // create working buffer and bitmap
             if (rgbBytes == null || frameWidth != buffer.getWidth() || frameHeight != buffer.getHeight()) {
                 frameWidth = buffer.getWidth();
@@ -451,13 +463,13 @@ public final class ObjectDetector {
                 rgbBytes = new int[frameWidth * frameHeight];
                 if (rgbBytes == null) {
                     Log.d(TAG, "cannot allocate buffer");
-                    return null;
+                    return false;
                 }
 
                 original = Bitmap.createBitmap(frameWidth, frameHeight, Bitmap.Config.ARGB_8888);
                 if (original == null) {
                     Log.d(TAG, "cannot create bitmap");
-                    return null;
+                    return false;
                 }
 
                 frameToCropTransform = ImageUtils.getTransformationMatrix(frameWidth, frameHeight, TF_INPUT_SIZE,
@@ -471,6 +483,11 @@ public final class ObjectDetector {
             // scale from original size to size expected by TensorFlow model
             canvas.drawBitmap(original, frameToCropTransform, null);
 
+            return true;
+        }
+
+        // Process a NV21 VideoFrame and return area of detected objects.
+        public Rect process() {
             Rect rect = detect(tfInput, frameWidth, frameHeight, cropToFrameTransform);
 
             if (SAVE_BITMAP) {
@@ -489,30 +506,65 @@ public final class ObjectDetector {
         }
     }
 
-    /**
-     * Process VideoFrame and return a rectangle representing area of interest.
-     * 
-     * This is used when intercepting video from WebRTC VideoSource.
-     * 
-     * @param frame
-     * @return Rect
-     */
-    public Rect processVideoFrame(VideoFrame frame) {
+    public void processVideoFrameInBackground(VideoFrame frame, VideoSource source) {
+        if (processingImage || handler == null) return;
+
+        processingImage = true;
+
+        // Extract image from the the video frame. This must be
+        // done on the calling thread. Once return to caller
+        // the video frame should not be touched.
         if (frame.getBuffer() instanceof VideoFrame.TextureBuffer) {
             if (textureVideoFrameProcessor == null) {
                 textureVideoFrameProcessor = new TextureVideoFrameProcessor();
             }
-
-            return textureVideoFrameProcessor.process(frame);
+            textureVideoFrameProcessor.process(frame);
         } else if (frame.getBuffer() instanceof NV21Buffer) {
-            if (nv21ideoFrameProcessor == null) {
-                nv21ideoFrameProcessor = new NV21VideoFrameProcessor();
+            if (nv21VideoFrameProcessor == null) {
+                nv21VideoFrameProcessor = new NV21VideoFrameProcessor();
             }
-
-            return nv21ideoFrameProcessor.process(frame);
+            NV21Buffer nv21Buffer = (NV21Buffer) frame.getBuffer();
+            nv21VideoFrameProcessor.extractImage(nv21Buffer);
         } else {
             Log.d(TAG, "unsupported VideoFrame");
+            return;
         }
-        return null;
+
+        handler.post(new Runnable() {
+           @Override
+            public void run() { 
+                Rect rect = null;
+                if (frame.getBuffer() instanceof VideoFrame.TextureBuffer) {
+                    rect = textureVideoFrameProcessor.process(frame);
+                } else if (frame.getBuffer() instanceof NV21Buffer) {
+                    rect = nv21VideoFrameProcessor.process();
+                }
+
+                if (rect != null) {
+                    source.setCrop(rect);
+                }
+                processingImage = false;
+            }
+        });
+    }
+
+    void resume() {
+        if (handlerThread == null) {
+            handlerThread = new HandlerThread("inference");
+            handlerThread.start();
+        } 
+        if (handler == null) {
+            handler = new Handler(handlerThread.getLooper());
+        }
+    }
+    void suspend() {
+        handlerThread.quitSafely();
+        try {
+          handlerThread.join();
+          handlerThread = null;
+          handler = null;
+        } catch (final InterruptedException e) {
+          Log.e(TAG, "InterruptedException");
+        }
     }
 }
