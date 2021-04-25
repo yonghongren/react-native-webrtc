@@ -1,4 +1,8 @@
 /*
+Based on https://www.tensorflow.org/lite/examples/object_detection/overview
+    (https://github.com/tensorflow/examples.git)
+    Example code under org.tensorflow.lite.detection is kept unmodified.
+
 Test result with C920 at 1280x720 on TX6:
    Processing in calling thread speed: 3 fps
    Processing in a background thread: 6-7 fps
@@ -14,7 +18,6 @@ import java.io.InputStream;
 import java.nio.ByteBuffer;
 
 import android.util.Log;
-import android.util.Size;
 import android.content.res.AssetManager;
 import android.graphics.Rect;
 import android.graphics.RectF;
@@ -23,13 +26,13 @@ import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Matrix;
 import android.content.Context;
-import android.os.Environment;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.opengl.GLES20;
 
+import org.tensorflow.lite.detection.tflite.Detector;
+import org.tensorflow.lite.detection.tflite.TFLiteObjectDetectionAPIModel;
 import org.webrtc.VideoFrame;
-import org.webrtc.VideoFrame.TextureBuffer;
 import org.webrtc.VideoFrameDrawer;
 import org.webrtc.GlTextureFrameBuffer;
 import org.webrtc.NV21Buffer;
@@ -37,8 +40,6 @@ import org.webrtc.GlRectDrawer;
 import org.webrtc.RendererCommon.GlDrawer;
 import org.webrtc.VideoSource;
 
-import org.tensorflow.lite.detection.tflite.Classifier;
-import org.tensorflow.lite.detection.tflite.TFLiteObjectDetectionAPIModel;
 import org.tensorflow.lite.detection.env.ImageUtils;
 
 public final class ObjectDetector {
@@ -53,9 +54,9 @@ public final class ObjectDetector {
     static final boolean TF_OD_API_IS_QUANTIZED = true;
     static final DetectorMode MODE = DetectorMode.TF_OD_API;
     static final float MINIMUM_CONFIDENCE_TF_OD_API = 0.6f;
-    Classifier classifier;
+    private Detector detector;
     // weather to save bitmaps onto file system for debugging
-    boolean SAVE_BITMAP = true;
+    boolean SAVE_BITMAP = false;
 
     BitmapFrameProcessor bitmapFrameProcessor;
     TextureVideoFrameProcessor textureVideoFrameProcessor;
@@ -65,17 +66,23 @@ public final class ObjectDetector {
     private Handler handler;
     private HandlerThread handlerThread;
 
-    public boolean initialize(AssetManager assetManager) {
+    public boolean initialize(Context context) {
         try {
-            classifier = TFLiteObjectDetectionAPIModel.create(assetManager, TF_OD_API_MODEL_FILE, TF_OD_API_LABELS_FILE,
-                    TF_INPUT_SIZE, TF_OD_API_IS_QUANTIZED);
+            detector = TFLiteObjectDetectionAPIModel.create(
+                    context, // assetManager,
+                    TF_OD_API_MODEL_FILE,
+                    TF_OD_API_LABELS_FILE,
+                    TF_INPUT_SIZE,
+                    TF_OD_API_IS_QUANTIZED);
         } catch (final IOException e) {
-            Log.e(TAG, "Exception initializing classifier!", e);
+            Log.e(TAG, "Exception initializing classifier", e);
             // e.printStackTrace();
             return false;
         }
 
-        // testObjectDetection(assetManager, "tf-test2.jpeg");
+        // copy test image to android/app/src/main/assets/
+        // AssetManager assetManager  = context.getAssets();
+        // testObjectDetection(assetManager, "tf-test.jpeg");
 
         return true;
     }
@@ -94,20 +101,20 @@ public final class ObjectDetector {
 
     /**
      * detect objects in a bitmap image
-     * 
-     * @param bitmap - the bitmap must be of size required by the model.
-     * @param originalWidth - the original image width
+     *
+     * @param bitmap         - the bitmap must be of size required by the model.
+     * @param originalWidth  - the original image width
      * @param originalHeight - ht eoriginal image height
      */
     private Rect detect(Bitmap bitmap, final int originalWidth, final int originalHeight, final Matrix transform) {
         RectF peopleRectF = new RectF(0, 0, 0, 0);
-        final List<Classifier.Recognition> results = classifier.recognizeImage(bitmap);
-        for (final Classifier.Recognition result : results) {
+        final List<Detector.Recognition> results = detector.recognizeImage(bitmap);
+        for (final Detector.Recognition result : results) {
             // Log.d(TAG, result.getTitle() + ": " + result.getConfidence());
             if (result.getConfidence() >= MINIMUM_CONFIDENCE_TF_OD_API && result.getTitle().equals("person")) {
                 final RectF location = result.getLocation();
                 peopleRectF.union(location.left, location.top, location.right, location.bottom);
-                Log.d(TAG, "detected person: " + location.left + "," + location.top + "," + location.right + ","
+                Log.d(TAG, "detected person: confidence=" + result.getConfidence() + ", location=" + location.left + "," + location.top + "," + location.right + ","
                         + location.bottom);
             }
         }
@@ -140,7 +147,7 @@ public final class ObjectDetector {
 
     /**
      * sanity test on object detection.
-     * 
+     *
      * @param assetManager
      * @param file
      */
@@ -240,10 +247,10 @@ public final class ObjectDetector {
 
     /**
      * Detect objects in a Bitmap image.
-     * 
+     * <p>
      * WebRTC EglRenderer provides video frames in Bitmap format. This is used when object
      * detection is performed on remote video streams.
-     * 
+     *
      * @param image
      * @return
      */
@@ -256,13 +263,12 @@ public final class ObjectDetector {
     }
 
     /**
-     * Draw Texture VideoFrame into bitmap.
-     * 
+     * Texture VideoFrame handling
      */
     class TextureVideoFrameProcessor {
         private VideoFrameDrawer videoFrameDrawer = null;
         private GlDrawer glDrawer = null;
-        private GlTextureFrameBuffer bitmapTextureFramebuffer;
+        private GlTextureFrameBuffer bitmapTextureFramebuffer = null;
         private Matrix drawMatrix;
         private final ByteBuffer bitmapBuffer = ByteBuffer.allocateDirect(TF_INPUT_SIZE * TF_INPUT_SIZE * 4);
         final Bitmap tfInput;
@@ -276,10 +282,12 @@ public final class ObjectDetector {
         Matrix frameToCropTransform;
         Matrix cropToFrameTransform = new Matrix();
 
+        final int scale = 8;
+        Bitmap scaledOriginal;
+
         TextureVideoFrameProcessor() {
             glDrawer = new GlRectDrawer();
             videoFrameDrawer = new VideoFrameDrawer();
-            bitmapTextureFramebuffer = new GlTextureFrameBuffer(GLES20.GL_RGBA);
 
             tfInput = Bitmap.createBitmap(TF_INPUT_SIZE, TF_INPUT_SIZE, Bitmap.Config.ARGB_8888);
 
@@ -288,12 +296,14 @@ public final class ObjectDetector {
             drawMatrix.preTranslate(0.5f, 0.5f);
             drawMatrix.preScale(1f, -1f); // image is upside down
             drawMatrix.preTranslate(-0.5f, -0.5f);
+
+            bitmapTextureFramebuffer = new GlTextureFrameBuffer(GLES20.GL_RGBA);
         }
 
         void release() {
             videoFrameDrawer.release();
             glDrawer.release();
-            bitmapTextureFramebuffer.release();
+            if (bitmapTextureFramebuffer != null) bitmapTextureFramebuffer.release();
             tfInput.recycle();
         }
 
@@ -301,6 +311,10 @@ public final class ObjectDetector {
             final int bitmapWidth = dst.getWidth();
             final int bitmapHeight = dst.getHeight();
 
+            // java.lang.IllegalStateException: Framebuffer not complete, status: 0
+            // This was caused by calling this with the same buffer by two different threads.
+            // GlTextureFrameBuffer can't be used by multiple threads.
+            // Log.d(TAG, "thread " + Thread.currentThread().getId());
             bitmapTextureFramebuffer.setSize(bitmapWidth, bitmapHeight);
 
             GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, bitmapTextureFramebuffer.getFrameBufferId());
@@ -329,22 +343,22 @@ public final class ObjectDetector {
         }
 
         /**
-         * Process VideoFrame with texture buffer.
-         * 
+         * Copy VideoFrame with texture buffer into a bitmap.
+         * <p>
          * EglRenderer.java has an example of drawing texture frame buffer into a
          * bitmap. Below follows that example.
-         * 
+         * <p>
          * sdk/android/api/org/webrtc/YuvConverter.java can convert from OES texture to
          * I420 YUV. It's possible to take advantage of this.
-         * 
-         * 
+         *
          * @param frame
          */
-        public Rect process(VideoFrame frame) {
+        public Boolean copy(VideoFrame frame) {
             VideoFrame.TextureBuffer buffer = (VideoFrame.TextureBuffer) frame.getBuffer();
             final int width = buffer.getWidth();
             final int height = buffer.getHeight();
-            // Log.d(TAG, "onFrame " + buffer.getType() + " w=" + width + "h=" + height);
+            Log.d(TAG, "onFrame " + buffer.getType() + " w=" + width + "h=" + height);
+            // if (true) return null;
 
             // Reconfigure if video changes size. This should happen only on the first frame
             // when no configuration exists. In other words, video size shouldn't change
@@ -368,10 +382,8 @@ public final class ObjectDetector {
             }
 
             if (drawTextureBufferToBitmap(frame, tfInput) == null) {
-                return null;
+                return false;
             }
-
-            Rect rect = detect(tfInput, width, height, cropToFrameTransform);
 
             if (SAVE_BITMAP) {
                 // Save the original
@@ -392,23 +404,32 @@ public final class ObjectDetector {
 
                 // The exact original image is not essential. A small image with aspect ratio
                 // preserved would tell whether detection is correct.
-                final int scale = 8;
-                Bitmap scaledOriginal = Bitmap.createBitmap(width / scale, height / scale, Bitmap.Config.ARGB_8888);
+                scaledOriginal = Bitmap.createBitmap(frameWidth / scale, frameHeight / scale, Bitmap.Config.ARGB_8888);
                 if (scaledOriginal == null) {
                     Log.d(TAG, "cannot create bitmap to save the original");
                 } else if (drawTextureBufferToBitmap(frame, scaledOriginal) == null) {
                     Log.d(TAG, "cannot draw texture buffer to save the original");
                 } else {
                     ImageUtils.saveBitmap(scaledOriginal, "scaled-original.png");
-                    if (rect != null && !rect.isEmpty()) {
-                        Bitmap detectedImage = Bitmap.createBitmap(scaledOriginal, rect.left / scale, rect.top / scale,
-                                (rect.right - rect.left) / scale, (rect.bottom - rect.top) / scale);
-                        ImageUtils.saveBitmap(detectedImage, "detected.png");
-                        detectedImage.recycle();
-                    }
                 }
                 if (scaledOriginal != null) {
                     scaledOriginal.recycle();
+                }
+
+            }
+
+            return true;
+        }
+
+        public Rect process() {
+            Rect rect = detect(tfInput, frameWidth, frameHeight, cropToFrameTransform);
+
+            if (SAVE_BITMAP) {
+                if (rect != null && !rect.isEmpty()) {
+                    Bitmap detectedImage = Bitmap.createBitmap(scaledOriginal, rect.left / scale, rect.top / scale,
+                            (rect.right - rect.left) / scale, (rect.bottom - rect.top) / scale);
+                    ImageUtils.saveBitmap(detectedImage, "detected.png");
+                    detectedImage.recycle();
                 }
 
                 ImageUtils.saveBitmap(tfInput, "input.png");
@@ -422,9 +443,8 @@ public final class ObjectDetector {
 
     /**
      * Process a NV21 VideoFrame and return area of detected objects.
-     * 
+     * <p>
      * Legacy camera API onPreviewFrame uses YUV420SP(aka YCbCr_420_SP, or NV21)
-     * 
      */
     class NV21VideoFrameProcessor {
         Bitmap original = null; // bitmap representing original image
@@ -509,8 +529,6 @@ public final class ObjectDetector {
     public void processVideoFrameInBackground(VideoFrame frame, VideoSource source) {
         if (processingImage || handler == null) return;
 
-        processingImage = true;
-
         // Extract image from the the video frame. This must be
         // done on the calling thread. Once return to caller
         // the video frame should not be touched.
@@ -518,7 +536,7 @@ public final class ObjectDetector {
             if (textureVideoFrameProcessor == null) {
                 textureVideoFrameProcessor = new TextureVideoFrameProcessor();
             }
-            textureVideoFrameProcessor.process(frame);
+            if (textureVideoFrameProcessor.copy(frame) == false) return;
         } else if (frame.getBuffer() instanceof NV21Buffer) {
             if (nv21VideoFrameProcessor == null) {
                 nv21VideoFrameProcessor = new NV21VideoFrameProcessor();
@@ -530,12 +548,16 @@ public final class ObjectDetector {
             return;
         }
 
+        // detection is done in a separate thread
+        processingImage = true;
+        Log.d(TAG, "processing");
+
         handler.post(new Runnable() {
-           @Override
-            public void run() { 
+            @Override
+            public void run() {
                 Rect rect = null;
                 if (frame.getBuffer() instanceof VideoFrame.TextureBuffer) {
-                    rect = textureVideoFrameProcessor.process(frame);
+                    rect = textureVideoFrameProcessor.process();
                 } else if (frame.getBuffer() instanceof NV21Buffer) {
                     rect = nv21VideoFrameProcessor.process();
                 }
@@ -543,6 +565,7 @@ public final class ObjectDetector {
                 if (rect != null) {
                     source.setCrop(rect);
                 }
+                Log.d(TAG, "processing done");
                 processingImage = false;
             }
         });
@@ -552,19 +575,20 @@ public final class ObjectDetector {
         if (handlerThread == null) {
             handlerThread = new HandlerThread("inference");
             handlerThread.start();
-        } 
+        }
         if (handler == null) {
             handler = new Handler(handlerThread.getLooper());
         }
     }
+
     void suspend() {
         handlerThread.quitSafely();
         try {
-          handlerThread.join();
-          handlerThread = null;
-          handler = null;
+            handlerThread.join();
+            handlerThread = null;
+            handler = null;
         } catch (final InterruptedException e) {
-          Log.e(TAG, "InterruptedException");
+            Log.e(TAG, "InterruptedException");
         }
     }
 }

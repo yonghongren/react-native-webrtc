@@ -28,9 +28,11 @@ android {
 
 dependencies {
     implementation 'com.facebook.react:react-native:+'
-    implementation 'org.tensorflow:tensorflow-lite:+'
-    // gpu doesn't appear to have any effect
-    implementation 'org.tensorflow:tensorflow-lite-gpu:+'
+    implementation 'org.tensorflow:tensorflow-lite:2.4.0'
+    implementation 'org.tensorflow:tensorflow-lite-gpu:2.4.0' // gpu doesn't appear to have any effect
+
+    implementation 'androidx.appcompat:appcompat:1.2.0'
+    implementation 'org.tensorflow:tensorflow-lite-task-vision:0.1.0'
 
     api fileTree(dir: 'libs', include: ['*.jar'])
 }

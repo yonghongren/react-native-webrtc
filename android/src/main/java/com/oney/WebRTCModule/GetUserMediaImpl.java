@@ -96,7 +96,7 @@ class GetUserMediaImpl {
 
     class VideoSourceFrameListener implements VideoSource.FrameListener {
         private boolean detectObjects = false;
-
+        int count = 0;
 
         public Rect onFrame(VideoFrame frame, VideoSource source) {
             if (detectObjects == false) {
@@ -104,8 +104,9 @@ class GetUserMediaImpl {
             }
 
             WebRTCModule module = reactContext.getNativeModule(WebRTCModule.class);
-
-            module.objectDetector.processVideoFrameInBackground(frame, source);
+            if (count++ % 100 == 0) {
+                module.objectDetector.processVideoFrameInBackground(frame, source);
+            }
             return null;
         }
 

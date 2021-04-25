@@ -18,20 +18,23 @@ import com.facebook.react.bridge.LifecycleEventListener;
 import com.facebook.react.module.annotations.ReactModule;
 import com.facebook.react.modules.core.DeviceEventManagerModule;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.tensorflow.lite.detection.tflite.TFLiteObjectDetectionAPIModel;
 import org.webrtc.*;
 import org.webrtc.audio.AudioDeviceModule;
 import org.webrtc.audio.JavaAudioDeviceModule;
+
+import org.tensorflow.lite.detection.tflite.Detector;
 
 @ReactModule(name = "WebRTCModule")
 public class WebRTCModule extends ReactContextBaseJavaModule implements LifecycleEventListener {
     static final String TAG = WebRTCModule.class.getCanonicalName();
     ObjectDetector objectDetector = new ObjectDetector();
-
     PeerConnectionFactory mFactory;
     private final SparseArray<PeerConnectionObserver> mPeerConnectionObservers;
     final Map<String, MediaStream> localStreams;
@@ -127,7 +130,8 @@ public class WebRTCModule extends ReactContextBaseJavaModule implements Lifecycl
 
         getUserMediaImpl = new GetUserMediaImpl(this, reactContext);
 
-        objectDetector.initialize(reactContext.getAssets());
+        Log.d(TAG, "WebRTC module initialization");
+        objectDetector.initialize(reactContext);
     }
 
     @Override
@@ -1002,7 +1006,7 @@ public class WebRTCModule extends ReactContextBaseJavaModule implements Lifecycl
     public void onHostPause() {
         Log.d(TAG, "onHostPause");
 
-        objectDetector.suspend();    
+        objectDetector.suspend();
     }
 
     @Override
